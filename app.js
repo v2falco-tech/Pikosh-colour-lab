@@ -40,7 +40,7 @@ const STYLES = {
   detailed: ['Older kids – detailed patterns', 'finer outlines with decorative patterns and richer detail, suitable for ages 8-12']
 };
 const state = {
-  cover: { title: 'My Colouring Book', subtitle: 'Colouring & activities for little artists', author: '', description: '', theme: '#ff7a59', image: null, prompt: '', refs: [] },
+  cover: { title: 'My Colouring Book', subtitle: 'Colouring & activities for little artists', author: '', description: '', theme: '#ff7a59', image: null, fullPage: false, prompt: '', refs: [] },
   pages: [],
   sel: 'cover'
 };
@@ -184,6 +184,7 @@ function colouringPrompt(p) {
   return `A children's colouring book page, A4 portrait composition. Black line art only: ${style}. Pure white background, no grey, no shading, no filled black areas, all shapes closed so they are easy to colour in, no text or letters. Subject: ${p.prompt}.${ref}`;
 }
 function coverPrompt(c) {
+  if (c.fullPage) return c.prompt + (c.refs && c.refs.length ? ' Use the attached reference image(s) for the subject and characters.' : '');
   const ref = c.refs && c.refs.length ? ' Use the attached reference image(s) for the subject and characters.' : '';
   return `Illustration for the front of a children's colouring book, black line art on pure white, bold clean outlines, no shading, no grey, no text. Subject: ${c.prompt}.${ref}`;
 }
@@ -256,6 +257,14 @@ function placeholder(x, msg, top) {
 /* ---------- cover ---------- */
 async function renderCover() {
   const c = state.cover; const [cv, x] = newPage();
+  if (c.fullPage && c.image) {            // picture IS the cover; description goes on the next page(s)
+    const img = await loadImg(c.image);
+    const k = Math.max(W / img.width, H / img.height);
+    x.drawImage(img, (W - img.width * k) / 2, (H - img.height * k) / 2, img.width * k, img.height * k);
+    let rest = [];
+    if (c.description.trim()) { x.font = `400 40px ${FONT}`; rest = wrap(x, c.description, W - 340); }
+    return { canvas: cv, rest, restFont: 40 };
+  }
   x.fillStyle = c.theme; x.fillRect(0, 0, W, H);
   x.fillStyle = '#fff'; rrect(x, 60, 60, W - 120, H - 120, 70); x.fill();
   x.save(); x.setLineDash([30, 22]); x.strokeStyle = c.theme; x.lineWidth = 10; x.lineCap = 'round';
@@ -524,11 +533,15 @@ function renderEditor() {
       h('label', { class: 'f' }, 'Cover colour', (() => { const i = h('input', { type: 'color' }); i.value = c.theme; i.addEventListener('input', () => { c.theme = i.value; refreshSoon(); }); return i; })()),
       h('h2', {}, 'Cover picture'),
       filesField(c, 'image', 'Use your own image', false),
+      h('label', { class: 'chk' }, (() => { const i = h('input', { type: 'checkbox' }); i.checked = !!c.fullPage; i.addEventListener('change', () => { c.fullPage = i.checked; refreshPreview(); }); return i; })(),
+        'Use the picture as the whole cover (hide the app’s frame, title and text)'),
+      h('p', { class: 'hint' }, 'Tick this when your AI prompt already includes the title and design. In this mode your prompt is sent exactly as written, and the description above moves to an “About this book” page.'),
       textField(c, 'prompt', 'Or describe cover art for AI', { area: true, rows: 3, ph: 'a happy fox painting a rainbow' }),
       filesField(c, 'refs', 'Reference images for the AI (optional)', true, () => {}),
       h('div', { class: 'actions' }, genButton('✨ Generate cover art', async () => {
         if (!c.prompt.trim()) throw new Error('Describe the cover art first.');
         c.image = await generateImage(coverPrompt(c), c.refs);
+        renderEditor();
       }))
     );
   } else {
