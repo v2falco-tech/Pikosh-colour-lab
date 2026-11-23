@@ -39,11 +39,31 @@ const STYLES = {
   medium: ['Kids – clear lines, moderate detail', 'clean medium-thick outlines, moderate detail, suitable for ages 4-8'],
   detailed: ['Older kids – detailed patterns', 'finer outlines with decorative patterns and richer detail, suitable for ages 8-12']
 };
-const state = {
-  cover: { title: 'My Colouring Book', subtitle: 'Colouring & activities for little artists', author: '', description: '', theme: '#ff7a59', image: null, fullPage: false, prompt: '', refs: [] },
-  pages: [],
-  sel: 'cover'
-};
+const defaultCover = () => ({ title: 'My Colouring Book', subtitle: 'Colouring & activities for little artists', author: '', description: '', theme: '#ff7a59', image: null, fullPage: false, prompt: '', refs: [] });
+const state = { cover: defaultCover(), pages: [], sel: 'cover' };
+
+/* ---------- autosave (IndexedDB, survives refresh / closing the tab) ---------- */
+const DB_NAME = 'cbm-db', STORE = 'kv';
+const idb = () => new Promise((res, rej) => {
+  const r = indexedDB.open(DB_NAME, 1);
+  r.onupgradeneeded = () => r.result.createObjectStore(STORE);
+  r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+});
+async function idbSet(k, v) {
+  const db = await idb();
+  return new Promise((res, rej) => { const t = db.transaction(STORE, 'readwrite'); t.objectStore(STORE).put(v, k); t.oncomplete = res; t.onerror = () => rej(t.error); });
+}
+async function idbGet(k) {
+  const db = await idb();
+  return new Promise((res, rej) => { const q = db.transaction(STORE).objectStore(STORE).get(k); q.onsuccess = () => res(q.result); q.onerror = () => rej(q.error); });
+}
+let saveWarned = false, restoring = true;
+async function saveNow() {
+  if (restoring) return;
+  try { await idbSet('draft', { v: 1, cover: state.cover, pages: state.pages, sel: state.sel }); }
+  catch (e) { if (!saveWarned) { saveWarned = true; toast('Auto-save failed – use “Save project” to keep your work.', true, 7000); } }
+}
+const scheduleSave = debounce(saveNow, 1200);
 
 const TYPES = {
   ai: { label: 'AI colouring page', icon: '🎨', make: () => ({ title: '', prompt: '', style: 'simple', refs: [], img: null }) },
@@ -457,6 +477,7 @@ async function buildAllPages(onProgress) {
 /* ---------- preview ---------- */
 let token = 0;
 async function refreshPreview() {
+  scheduleSave();
   const t = ++token; let cv;
   try {
     cv = state.sel === 'cover' ? (await renderCover()).canvas
@@ -466,6 +487,8 @@ async function refreshPreview() {
   const box = $('#preview'); box.innerHTML = ''; box.appendChild(cv);
 }
 const refreshSoon = debounce(refreshPreview, 250);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') saveNow(); });
+window.addEventListener('pagehide', saveNow);
 const curPage = () => state.pages.find(p => p.id === state.sel);
 
 /* ---------- editor UI ---------- */
@@ -584,6 +607,7 @@ function renderEditor() {
 
 /* ---------- page list ---------- */
 function renderList() {
+  scheduleSave();
   const ul = $('#pageList'); ul.innerHTML = '';
   const add = (id, label, extra) => ul.append(h('li', { class: state.sel === id ? 'sel' : '', onclick: () => select(id) },
     h('span', { class: 'nm' }, label), extra || ''));
@@ -634,7 +658,7 @@ async function downloadPdf() {
 }
 
 /* ---------- wiring ---------- */
-function init() {
+async function init() {
   const sel = $('#addType');
   Object.entries(TYPES).forEach(([k, v]) => sel.append(h('option', { value: k }, v.icon + ' ' + v.label)));
   $('#btnAdd').onclick = () => { const p = addPage(sel.value); select(p.id); };
@@ -682,9 +706,25 @@ function init() {
     e.target.value = '';
   };
 
-  // a starter page so it isn't empty
-  addPage('ai', { prompt: 'a friendly lion with a big fluffy mane' });
-  addPage('maze'); addPage('wordsearch');
+  $('#btnNew').onclick = async () => {
+    if (!confirm('Start a new book? This clears the current one. Use “Save project” first if you want to keep it.')) return;
+    state.cover = defaultCover(); state.pages = []; state.sel = 'cover';
+    addPage('ai'); renderList(); renderEditor(); refreshPreview(); saveNow(); toast('New book started');
+  };
+  try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) {}
+  let draft = null;
+  try { draft = await idbGet('draft'); } catch (e) {}
+  if (draft && draft.cover && Array.isArray(draft.pages)) {
+    Object.assign(state.cover, draft.cover);
+    state.pages = draft.pages.filter(p => TYPES[p.type]);
+    state.sel = state.pages.some(p => p.id === draft.sel) ? draft.sel : 'cover';
+    toast('Restored your last session');
+  } else {
+    // a starter page so it isn't empty
+    addPage('ai', { prompt: 'a friendly lion with a big fluffy mane' });
+    addPage('maze'); addPage('wordsearch');
+  }
+  restoring = false;
   renderList(); renderEditor();
   (document.fonts && document.fonts.ready ? document.fonts.ready : Promise.resolve()).then(refreshPreview);
 }
