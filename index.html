@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Colouring Book Maker</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <h1>🖍️ Colouring Book Maker</h1>
+    <div class="hdr-actions">
+      <button id="btnSave" class="ghost">Save project</button>
+      <button id="btnOpen" class="ghost">Open project</button>
+      <input type="file" id="fileOpen" accept=".json" hidden>
+      <button id="btnPdf" class="primary">⬇ Download PDF</button>
+    </div>
+  </header>
+
+  <main>
+    <aside id="side">
+      <section>
+        <h2>Book <span id="count"></span></h2>
+        <ul id="pageList"></ul>
+      </section>
+
+      <section>
+        <h2>Add a page</h2>
+        <div class="row">
+          <select id="addType"></select>
+          <button id="btnAdd" class="primary">Add</button>
+        </div>
+        <details>
+          <summary>Add many AI pages at once</summary>
+          <p class="hint">One idea per line. Each becomes its own colouring page.</p>
+          <textarea id="bulk" rows="5" placeholder="a smiling elephant in a rain hat&#10;a rocket flying past planets&#10;a cat riding a bicycle"></textarea>
+          <button id="btnBulk">Add these pages</button>
+        </details>
+        <button id="btnGenAll" class="ghost wide">✨ Generate all AI pages</button>
+      </section>
+
+      <section>
+        <details id="settings">
+          <summary>⚙️ AI settings</summary>
+          <label class="f">Access code
+            <input type="password" id="sKey" placeholder="the APP_PASSWORD you set in Netlify" autocomplete="off">
+          </label>
+          <p class="hint">Remembered in this browser only. It stops other people using your AI credits.</p>
+          <label class="f">AI image shape
+            <select id="sSize">
+              <option value="3:4">Portrait (best for A4)</option>
+              <option value="4:3">Landscape</option>
+              <option value="1:1">Square</option>
+            </select>
+          </label>
+          <label class="chk"><input type="checkbox" id="sClean"> Clean to crisp black &amp; white</label>
+        </details>
+      </section>
+    </aside>
+
+    <section id="editor"></section>
+
+    <section id="previewCol">
+      <div class="pv-head">A4 preview</div>
+      <div id="preview"></div>
+    </section>
+  </main>
+
+  <div id="toast" role="status"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+  <script src="gen.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
